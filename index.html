@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>素芸物流 · 发货看板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f6fb; --panel:#fff; --ink:#1f2937; --sub:#6b7280; --line:#e5e7eb;
+    --brand:#2563eb; --green:#10b981; --amber:#f59e0b; --red:#ef4444; --purple:#8b5cf6; --cyan:#06b6d4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  #app{display:flex;min-height:100vh}
+  /* 左侧导航 */
+  .nav{width:210px;background:#0f172a;color:#cbd5e1;flex:0 0 210px;padding:18px 0;position:sticky;top:0;height:100vh;overflow-y:auto}
+  .nav h1{font-size:15px;color:#fff;padding:0 18px 14px;border-bottom:1px solid #1e293b;margin-bottom:10px;line-height:1.4}
+  .nav .tag{font-size:11px;color:#64748b;font-weight:400}
+  .nav a{display:flex;align-items:center;gap:9px;padding:11px 18px;color:#cbd5e1;text-decoration:none;font-size:13.5px;cursor:pointer;border-left:3px solid transparent}
+  .nav a:hover{background:#1e293b;color:#fff}
+  .nav a.active{background:#1e293b;color:#fff;border-left-color:var(--brand)}
+  .nav .ic{font-size:16px;width:20px;text-align:center}
+  /* 主区 */
+  main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .filterbar{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);padding:12px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .filterbar label{font-size:12px;color:var(--sub);display:flex;flex-direction:column;gap:3px}
+  .filterbar select{padding:6px 10px;border:1px solid var(--line);border-radius:7px;font-size:13px;background:#fff;color:var(--ink);min-width:120px}
+  .filterbar .reset{margin-left:auto;padding:7px 14px;border:1px solid var(--line);border-radius:7px;background:#f8fafc;cursor:pointer;font-size:12px}
+  .filterbar .meta{font-size:12px;color:var(--sub);width:100%}
+  .page{padding:22px 24px;display:none}
+  .page.active{display:block}
+  h2{font-size:18px;margin-bottom:4px}
+  .page .desc{color:var(--sub);font-size:12.5px;margin-bottom:16px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:14px;margin-bottom:20px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 16px}
+  .kpi .k{font-size:12px;color:var(--sub);margin-bottom:7px}
+  .kpi .v{font-size:25px;font-weight:700;letter-spacing:.5px}
+  .kpi .s{font-size:11.5px;color:var(--sub);margin-top:5px}
+  .kpi.blue .v{color:var(--brand)} .kpi.green .v{color:var(--green)} .kpi.amber .v{color:var(--amber)}
+  .kpi.red .v{color:var(--red)} .kpi.purple .v{color:var(--purple)} .kpi.cyan .v{color:var(--cyan)}
+  .grid{display:grid;gap:18px;margin-bottom:18px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h3{font-size:14px;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+  .card h3 .dot{width:8px;height:8px;border-radius:50%;background:var(--brand)}
+  .chartbox{position:relative;height:300px}
+  .chartbox.sm{height:240px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{background:#f8fafc;color:var(--sub);font-weight:600;position:sticky;top:0}
+  tbody tr:hover{background:#f8fafc}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
+  .pill.y{background:#dcfce7;color:#166534} .pill.n{background:#fee2e2;color:#991b1b}
+  .pill.w{background:#fef9c3;color:#854d0e} .pill.b{background:#dbeafe;color:#1e40af}
+  .note{font-size:12px;color:var(--sub);background:#f8fafc;border:1px dashed var(--line);border-radius:8px;padding:10px 12px;margin-top:10px;line-height:1.6}
+  .ringrow{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .ringwrap{display:flex;flex-direction:column;align-items:center}
+  .big{font-size:30px;font-weight:800}
+  .details-tools{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .details-tools input{padding:7px 11px;border:1px solid var(--line);border-radius:7px;font-size:13px;min-width:240px}
+  .pager{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:12.5px;color:var(--sub)}
+  .pager button{padding:5px 12px;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer}
+  .pager button:disabled{opacity:.4;cursor:not-allowed}
+  .legend-inline{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-top:8px}
+  .legend-inline span{display:flex;align-items:center;gap:5px}
+  .legend-inline i{width:10px;height:10px;border-radius:2px;display:inline-block}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside class="nav">
+    <h1>素芸物流 · 发货看板</h1>
+    <a data-page="overview" class="active"><span class="ic">📊</span>发货概览</a>
+    <a data-page="mix"><span class="ic">🚢</span>运输结构 &amp; 成本</a>
+    <a data-page="efficiency"><span class="ic">⏱️</span>发运效率</a>
+    <a data-page="inspection"><span class="ic">🔎</span>查验情况</a>
+    <a data-page="exception"><span class="ic">⚠️</span>异常 &amp; 赔付</a>
+    <a data-page="delay"><span class="ic">⏳</span>延误分析</a>
+    <a data-page="trend"><span class="ic">📈</span>趋势分析</a>
+    <a data-page="intransit"><span class="ic">🚚</span>在途监控</a>
+    <a data-page="usocean"><span class="ic">🚢</span>美线海运时效对比</a>
+    <a data-page="detail"><span class="ic">📋</span>订单明细</a>
+  </aside>
+  <main>
+    <div class="filterbar">
+      <label>事业部<select id="fBu"></select></label>
+      <label>渠道<select id="fChannel"></select></label>
+      <label>国家<select id="fCountry"></select></label>
+      <label>运输方式<select id="fTransport"></select></label>
+      <label>国家+类型<select id="fCat"></select></label>
+      <label>月份<select id="fMonth"></select></label>
+      <button class="reset" id="resetBtn">重置筛选</button>
+      <div class="meta" id="metaLine"></div>
+    </div>
+
+    <!-- 1. 发货概览 -->
+    <section class="page active" id="page-overview">
+      <h2>发货概览</h2>
+      <!-- 发货概览 -->
+      <div class="kpis" id="ovKpis"></div>
+      <div class="grid g2">
+        <div class="card"><h3><span class="dot"></span>月度发运量趋势</h3><div class="chartbox"><canvas id="ovTrend"></canvas></div></div>
+        <div class="card"><h3><span class="dot"></span>月度时效达标率趋势</h3><div class="chartbox"><canvas id="ovRate"></canvas></div></div>
+      </div>
+      <div class="card"><h3><span class="dot"></span>我的运输结构（国家 × 运输方式，Top 12 · 成本视角）</h3><div class="chartbox"><canvas id="ovMix"></canvas></div>
+        <div class="note">运输方式占比直接反映我的运费成本结构：海运/铁陆运便宜但慢，空运/快递快但贵。占比异常漂移=成本或渠道策略变化信号。</div></div>
+    </section>
+
+    <!-- 2. 运输结构 & 成本 -->
+    <section class="page" id="page-mix">
+      <h2>运输结构 &amp; 成本</h2>
+      <!-- 运输结构 & 成本：按国家+运输方式看运费结构 -->
+      <div class="grid g2">
+        <div class="card"><h3><span class="dot"></span>各国运输方式构成（票数）</h3><div class="chartbox"><canvas id="mixStack"></canvas></div></div>
+        <div class="card"><h3><span class="dot"></span>运输方式占比</h3><div class="chartbox"><canvas id="mixPie"></canvas></div></div>
+      </div>
+      <div class="card"><h3><span class="dot"></span>运输方式 × 成本/效率对照</h3>
+        <table id="mixTable"><thead><tr><th>运输方式</th><th>票数</th><th>占比</th><th>件数</th><th>CBM</th><th>平均时效(天)</th><th>达标率</th></tr></thead><tbody></tbody></table>
+      </div>
+    </section>
+
+    <!-- 3. 发运效率 -->
+    <section class="page" id="page-efficiency">
+      <h2>发运效率</h2>
+      <!-- 发运效率：下单→发运 + 渠道时效达成 -->
+      <div class="kpis" id="effKpis"></div>
+      <div class="grid g2">
+        <div class="card"><h3><span class="dot"></span>下单 → 发运 时长分布（天）</h3><div class="chartbox sm"><canvas id="effHist"></canvas></div>
+          <div class="note">口径：仓库出货日期 − 提交物流处理日期。越长说明我方/仓库衔接越拖。</div></div>
+        <div class="card"><h3><span class="dot"></span>各素芸物流渠道 时效达成率 vs 平均时效</h3><div class="chartbox sm"><canvas id="effChan"></canvas></div>
+          <div class="note">「渠道」取素芸内部物流渠道（素芸物流渠道），代理渠道为其 1→N 下游，故此处按内部渠道聚合。</div></div>
+      </div>
+      <div class="card"><h3><span class="dot"></span>月度时效达标率趋势</h3><div class="chartbox sm"><canvas id="effTrend"></canvas></div></div>
+    </section>
+
+    <!-- 4. 查验情况 -->
+    <section class="page" id="page-inspection">
+      <h2>查验情况</h2>
+      <!-- 查验情况：国内/国外双维独立环 + 交叉矩阵 -->
+      <div class="kpis" id="inspKpis"></div>
+      <div class="ringrow">
+        <div class="card ringwrap"><h3><span class="dot" style="background:var(--brand)"></span>国内（出口）查验</h3><div class="chartbox sm"><canvas id="ringDom"></canvas></div></div>
+        <div class="card ringwrap"><h3><span class="dot" style="background:var(--amber)"></span>国外（目的港）查验</h3><div class="chartbox sm"><canvas id="ringOvs"></canvas></div></div>
+      </div>
+      <div class="grid g2" style="margin-top:18px">
+        <div class="card"><h3><span class="dot"></span>查验交叉矩阵（同一批货的两种可能）</h3>
+          <div class="chartbox sm"><canvas id="inspCross"></canvas></div>
+          <div class="note">单一国内 / 单一国外 / 国内+国外 同时发生 / 都无。关注"国内+国外"那批——两头卡，时效最危险。</div></div>
+        <div class="card"><h3><span class="dot"></span>查验时长（还在查的货，平均卡了多少天）</h3>
+          <div style="display:flex;gap:24px;margin:10px 0 4px">
+            <div><div class="big" style="color:var(--brand)" id="domDays">–</div><div class="s" style="color:var(--sub);font-size:12px">国内在查平均(天)</div></div>
+            <div><div class="big" style="color:var(--amber)" id="ovsDays">–</div><div class="s" style="color:var(--sub);font-size:12px">国外在查平均(天)</div></div>
+          </div>
+          <div class="legend-inline" id="inspReleased"></div>
+          <div class="note">口径：仅统计"当前仍在查"的票（已放行=结案不计入均值）。国内/国外查验时间字段为日期=在查、为数值=已放行（数值即持续天数）；当前查验时长字段为数值=在查持续天数、为"已放行"=结案。</div></div>
+      </div>
+      <div class="grid g2" style="margin-top:18px">
+        <div class="card"><h3><span class="dot" style="background:var(--green)"></span>已放行查验 · 耗时统计（天）</h3>
+          <table id="relStatTable"><thead><tr><th>指标</th><th>国内·起运港</th><th>国外·目的港</th></tr></thead><tbody></tbody></table>
+          <div class="note">口径：仅统计"已放行/结案"的查验票；耗时取自查验时间字段的数值（=放行−查验开始），即货被卡在海关的实际天数。分位值 P25/P50/P75/P90。</div></div>
+        <div class="card"><h3><span class="dot"></span>已放行查验 · 耗时分布（票数）</h3><div class="chartbox sm"><canvas id="relHist"></canvas></div></div>
+      </div>
+      <div class="card"><h3><span class="dot"></span>各渠道 查验率（国内 / 国外）</h3>
+        <div class="note">仅显示票数≥30 的渠道，按综合查验率（国内+国外）降序取 Top 15；低票数渠道因样本不足被隐藏，避免噪声。</div>
+        <div class="grid g2">
+          <div><div class="chartbox sm"><canvas id="inspChan"></canvas></div></div>
+          <div><table id="inspChanTable"><thead><tr><th>渠道</th><th>票数</th><th>国内</th><th>国内率</th><th>国外</th><th>国外率</th><th>综合率</th></tr></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. 异常 & 赔付 -->
+    <section class="page" id="page-exception">
+      <h2>异常 &amp; 赔付</h2>
+      <!-- 异常 & 赔付：延误 + 赔付/索赔/开查 -->
+      <div class="kpis" id="excKpis"></div>
+      <div class="grid g2">
+        <div class="card"><h3><span class="dot" style="background:var(--red)"></span>异常构成（延误 vs 赔付索赔开查）</h3><div class="chartbox"><canvas id="excDough"></canvas></div></div>
+        <div class="card"><h3><span class="dot"></span>延误类型 Top（原始延误类型）</h3><div class="chartbox"><canvas id="excDelay"></canvas></div></div>
+      </div>
+      <div class="card"><h3><span class="dot"></span>异常率对比（按维度）</h3>
+        <table id="excTable"><thead><tr><th>维度</th><th>对象</th><th>总票</th><th>异常票</th><th>异常率</th><th>其中赔付/索赔/开查</th></tr></thead><tbody></tbody></table>
+        <div class="note">异常率 = （延误异常 + 赔付索赔开查）/ 总票。赔付索赔开查是已经或可能引发钱的，单列跟踪。</div></div>
+    </section>
+
+    <!-- 6. 延误分析 -->
+    <section class="page" id="page-delay">
+      <h2>延误分析</h2>
+      <!-- 延误分析：超过参考时效仍未签收，含人工漏填延误类型的订单 -->
+      <div class="kpis" id="delayKpis"></div>
+      <div class="grid g2">
+        <div class="card"><h3><span class="dot"></span>超参考时效天数分布</h3><div class="chartbox sm"><canvas id="delayHist"></canvas></div></div>
+        <div class="card"><h3><span class="dot"></span>超参考时效 按渠道分布</h3><div class="chartbox sm"><canvas id="delayChan"></canvas></div></div>
+      </div>
+      <div class="card"><h3><span class="dot"></span>应填未填延误类型（人工疏漏清单）</h3>
+        <div class="note">口径：在途 + 超过参考时效 + 延误类型为空。这些订单理论上都应填写延误类型，用于复盘人工漏填。</div>
+        <table id="delayBlankTable"><thead><tr><th>出仓单号</th><th>事业部</th><th>渠道</th><th>国家</th><th>出货日期</th><th>在途天数</th><th>参考时效</th><th>超期天数</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card" style="margin-top:18px"><h3><span class="dot" style="background:var(--red)"></span>查验对延误的影响（起运港 / 目的港）</h3>
+        <div class="grid g2">
+          <div><div class="chartbox sm"><canvas id="inspImpactChart"></canvas></div></div>
+          <div><table id="inspImpactTable"><thead><tr><th>查验维度</th><th>票数</th><th>平均全程时效</th><th>平均参考时效</th><th>平均超期</th><th>查验导致延误</th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="note">口径：仅统计"已完成签收 + 含参考时效"的票。维度 = 查验交叉（无查验 / 仅起运港 / 仅目的港 / 起运港+目的港）。平均超期 = 平均全程时效 − 平均参考时效；"查验导致延误" = 该维度平均超期 − 无查验平均超期（剔除渠道/航线本身差异，反映查验的净拖累天数）。</div>
+      </div>
+    </section>
+
+    <!-- 趋势分析 -->
+    <section class="page" id="page-trend">
+      <h2>趋势分析</h2>
+      <div class="note">时间维度 = 仓库出货日期（按 年-月 聚合）。所有图表受顶部全局筛选影响。注意：最近一个出货月份因部分货仍在途 / 未签收，时效与达标率可能因分母变小而偏低，属正常口径差异。</div>
+      <div class="kpis" id="trKpis"></div>
+      <div class="grid g2">
+        <div class="card"><h3><span class="dot"></span>月度发运量趋势</h3><div class="chartbox"><canvas id="trVol"></canvas></div></div>
+        <div class="card"><h3><span class="dot"></span>查验率趋势（国内 / 国外 / 综合）</h3><div class="chartbox"><canvas id="trInsp"></canvas></div></div>
+      </div>
+      <div class="grid g2">
+        <div class="card"><h3><span class="dot"></span>时效趋势（平均全程时效 / 时效达标率）</h3><div class="chartbox"><canvas id="trTime"></canvas></div>
+          <div class="note">平均时效 = 已完成签收票（签收日 − 出货日）均值；达标率 = 已完成票中「是否达标=是」占比。</div></div>
+        <div class="card"><h3><span class="dot"></span>异常 / 未达标率趋势</h3><div class="chartbox"><canvas id="trExc"></canvas></div>
+          <div class="note">异常率 = 含延误 / 赔付索赔开查 / 超时 的票占比；未达标率 = 已完成签收票中「是否达标=否」占比，与达标率互补相加为 100%。</div></div>
+      </div>
+      <div class="card"><h3><span class="dot"></span>月度指标明细表</h3>
+        <table id="trTable"><thead><tr><th>出货月份</th><th>票数</th><th>国内查验率</th><th>国外查验率</th><th>综合查验率</th><th>平均时效(天)</th><th>达标率</th><th>异常率</th><th>超时率</th></tr></thead><tbody></tbody></table>
+        <div class="note">综合查验率 = （国内查验 + 国外查验）/ 票数（同一票可能双查，故可高于单维率之和）。达标率、超时率均按已完成签收票计算，两者相加 = 100%。</div></div>
+    </section>
+
+    <!-- 7. 在途监控 -->
+    <section class="page" id="page-intransit">
+      <h2>在途监控</h2>
+      <!-- 在途监控：未签收订单与超时 -->
+      <div class="kpis" id="intrKpis"></div>
+      <div class="grid g2">
+        <div class="card"><h3><span class="dot"></span>超时票数（按渠道）</h3><div class="chartbox sm"><canvas id="intrChan"></canvas></div></div>
+        <div class="card"><h3><span class="dot"></span>在途账龄分布（出货至今天数）</h3><div class="chartbox sm"><canvas id="intrAge"></canvas></div>
+          <div class="note">账龄越长=占用越多、断货风险越高。30天以上应重点跟进。</div></div>
+      </div>
+    </section>
+
+    <!-- 8. 美线海运时效对比 -->
+    <section class="page" id="page-usocean">
+      <h2>美线海运时效对比</h2>
+      <!-- 美线海运：船型(美森正班/美森加班/快船/普船) × 派送类型(卡派/快递派) × 区域(美西/美中/美东) 时效对比，用于评估"能否换更便宜船型" -->
+      <div class="filterbar" style="position:static;border-bottom:1px dashed var(--line);margin-bottom:18px">
+        <label>派送类型<select id="fUsDelivery"><option value="">全部</option><option value="卡派">卡派(海卡)</option><option value="快递派">快递派(海派)</option></select></label>
+        <label>区域<select id="fUsRegion"><option value="">全部</option><option value="美西">美西</option><option value="美中">美中</option><option value="美东">美东</option></select></label>
+        <span class="meta" style="width:auto" id="usScope"></span>
+      </div>
+      <div class="kpis" id="usKpis"></div>
+      <div class="grid g2">
+        <div class="card"><h3><span class="dot"></span>月度时效趋势（按船型 · 受派送/区域联动）</h3><div class="chartbox"><canvas id="usTrend"></canvas></div>
+          <div class="note">X=业务所属月份，Y=平均全程时效(天，仅已完成签收票)。四条线即四种船型。若两条线贴合→时效几乎无差，即可评估换更便宜船型省运费。</div></div>
+        <div class="card"><h3><span class="dot"></span>船型 × 区域 平均时效（受派送类型联动）</h3><div class="chartbox"><canvas id="usBar"></canvas></div>
+          <div class="note">分组柱：X=船型，每组三色=美西/美中/美东。同组内柱高越接近→该区域下不同船型时效越无差。受上方"派送类型"筛选；"区域"若选具体值则只显示该区域。</div></div>
+      </div>
+      <div class="card"><h3><span class="dot"></span>降档优化机会（时效差≤3天即提示可替代）</h3>
+        <div id="usTips" class="note" style="border-style:solid"></div>
+      </div>
+      <div class="card"><h3><span class="dot"></span>船型 × 派送类型 × 区域 全景表</h3>
+        <table id="usTable"><thead><tr><th>船型</th><th>派送类型</th><th>区域</th><th>票数</th><th>平均时效(天)</th><th>中位时效(天)</th><th>时效达标率</th></tr></thead><tbody></tbody></table>
+        <div class="note">口径：船型取自「素芸物流渠道」名称关键字（含"美森正班"→美森正班；含"美森船"→美森加班；"快船"→快船；"普船"→普船）；"海卡"→卡派、"海派"→快递派；区域取「区域」列，美国订单区域缺失按邮编首位数推导（8/9→美西、4/5/6/7→美中、0/1/2/3→美东）。时效仅统计已签收票。</div>
+      </div>
+    </section>
+
+    <!-- 7. 订单明细 -->
+    <section class="page" id="page-detail">
+      <h2>订单明细</h2>
+      <!-- 订单明细：可搜索定位具体货物 -->
+      <div class="details-tools">
+        <input id="detSearch" placeholder="搜索 出仓单号/物流单号/事业部/国家/渠道/店铺/销售…">
+        <span id="detCount" style="font-size:12.5px;color:var(--sub)"></span>
+      </div>
+      <div class="card" style="padding:0;overflow-x:auto">
+        <table id="detTable"><thead><tr>
+          <th>出仓单号</th><th>物流单号</th><th>事业部</th><th>店铺</th><th>素芸渠道</th><th>代理渠道</th><th>国家</th><th>类型</th>
+          <th>出货日期</th><th>状态</th><th>达标</th><th>国内查</th><th>国外查</th><th>延误类型</th><th>异常</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+      <div class="pager">
+        <button id="detPrev">上一页</button><span id="detPageInfo"></span><button id="detNext">下一页</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const PAL=['#2563eb','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1'];
+// 美线海运船型（价格梯度：左贵右廉）
+const SHIPS=['美森正班','美森加班','快船','普船'];
+const SHIP_TIER={'美森正班':0,'美森加班':1,'快船':2,'普船':3};
+const REGION_COLORS={'美西':'#2563eb','美中':'#f59e0b','美东':'#10b981'};
+const DELIV=['卡派','快递派'];
+const REGIONS=['美西','美中','美东'];
+const charts={};
+let ALL=[], META=null;
+let F={bu:'',channel:'',country:'',transport:'',cat:'',month:''};
+let usSel={delivery:'',region:''};
+let curPage='overview';
+const detail={page:1,size:50,search:''};
+
+const fmtN=n=>n.toLocaleString('zh-CN');
+const pct=(a,b)=>b>0?(a/b*100):0;
+const fPct=(a,b)=>(b>0?(a/b*100).toFixed(1):'0.0')+'%';
+const sum=(a,k)=>a.reduce((s,r)=>s+(+r[k]||0),0);
+const meanPos=(a,k)=>{const v=a.map(r=>+r[k]||0).filter(x=>x>0);return v.length?v.reduce((x,y)=>x+y,0)/v.length:0;};
+// 分位数（线性插值）与统计块
+const quantile=(arr,p)=>{if(!arr.length)return 0;const a=[...arr].sort((x,y)=>x-y);const idx=(a.length-1)*p,lo=Math.floor(idx),hi=Math.ceil(idx);return lo===hi?a[lo]:a[lo]+(a[hi]-a[lo])*(idx-lo);};
+const statBlock=(arr)=>{if(!arr.length)return null;const a=[...arr].sort((x,y)=>x-y);return{n:arr.length,min:a[0],max:a[a.length-1],mean:arr.reduce((x,y)=>x+y,0)/arr.length,med:quantile(arr,0.5),p25:quantile(arr,0.25),p75:quantile(arr,0.75),p90:quantile(arr,0.90)};};
+const median=(a)=>{const v=a.filter(x=>(+x||0)>0).map(x=>+x).sort((x,y)=>x-y);if(!v.length)return 0;const m=Math.floor(v.length/2);return v.length%2?v[m]:(v[m-1]+v[m])/2;};
+const monthK=d=>d?d.slice(0,7):'未知';
+function uniq(a,k){return [...new Set(a.map(r=>r[k]).filter(x=>x))];}
+function group(a,k){const m={};a.forEach(r=>{const key=(r[k]||'未知');(m[key]=m[key]||[]).push(r);});return m;}
+function chart(id,cfg){const cv=document.getElementById(id);if(!cv)return;if(charts[id])charts[id].destroy();charts[id]=new Chart(cv.getContext('2d'),cfg);}
+
+// 环形图百分比标签插件（仅对配置里显式 plugins:[pctLabel] 的图生效）
+const pctLabel={id:'pctLabel',afterDatasetsDraw(c){
+  const ds=c.data.datasets[0]; if(!ds)return;
+  const data=ds.data.map(Number); const total=data.reduce((a,b)=>a+b,0); if(!total)return;
+  const meta=c.getDatasetMeta(0); const ctx=c.ctx;
+  meta.data.forEach((el,i)=>{
+    const p=total?data[i]/total*100:0; if(p<3)return;   // 占比太小的不画，避免挤成一团
+    const ang=(el.startAngle+el.endAngle)/2, r=el.outerRadius*0.62;
+    const x=el.x+Math.cos(ang)*r, y=el.y+Math.sin(ang)*r;
+    ctx.save();ctx.fillStyle='#1f2937';ctx.font='11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(p.toFixed(1)+'%',x,y);ctx.restore();
+  });
+}};
+
+function applyFilters(){
+  return ALL.filter(r=>
+    (!F.bu||r.bu===F.bu)&&(!F.channel||r.channel===F.channel)&&
+    (!F.country||r.country===F.country)&&(!F.transport||r.transport===F.transport)&&
+    (!F.cat||r.channelCategory===F.cat)&&(!F.month||monthK(r.date)===F.month)
+  );
+}
+
+/* ---------- 各页面渲染 ---------- */
+function renderOverview(rows){
+  const signed=rows.filter(r=>r.isSigned);
+  const valid=signed.filter(r=>r.onTime==='是'||r.onTime==='否');
+  const yes=valid.filter(r=>r.onTime==='是').length;
+  const dom=rows.filter(r=>r.domesticInsp).length;
+  const ovs=rows.filter(r=>r.overseasInsp).length;
+  const excCore=rows.filter(r=>r.isDelayed||r.lossClaim).length;
+  const procMean=meanPos(rows,'processDays');
+  const kpis=[
+    {k:'我的总票数',v:fmtN(rows.length),s:`已签收 ${signed.length} · 在途 ${rows.length-signed.length}`,c:'blue'},
+    {k:'下单→发运 均长',v:procMean.toFixed(1)+'天',s:'提交物流→仓库出货',c:'cyan'},
+    {k:'时效达成率',v:fPct(yes,valid.length),s:`已判定 ${valid.length} 票`,c:'green'},
+    {k:'国内查验率',v:fPct(dom,rows.length),s:`${dom} 票被查`,c:'blue'},
+    {k:'国外查验率',v:fPct(ovs,rows.length),s:`${ovs} 票被查`,c:'amber'},
+    {k:'异常率',v:fPct(excCore,rows.length),s:`延误+赔付索赔 ${excCore} 票`,c:'red'},
+  ];
+  document.getElementById('ovKpis').innerHTML=kpis.map(x=>`<div class="kpi ${x.c}"><div class="k">${x.k}</div><div class="v">${x.v}</div><div class="s">${x.s}</div></div>`).join('');
+  // 月度发运量
+  const mg=group(rows,'date');const months=[...new Set(rows.map(r=>monthK(r.date)))].filter(m=>m!=='未知').sort();
+  const vol=months.map(m=>rows.filter(r=>monthK(r.date)===m).length);
+  const sg=months.map(m=>rows.filter(r=>monthK(r.date)===m&&r.isSigned).length);
+  chart('ovTrend',{type:'line',data:{labels:months,datasets:[
+    {label:'发运量',data:vol,borderColor:PAL[0],backgroundColor:PAL[0]+'22',fill:true,tension:.3},
+    {label:'已签收',data:sg,borderColor:PAL[1],backgroundColor:'transparent',fill:false,tension:.3}]},
+    options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true}}}});
+  // 月度达标率
+  const rate=months.map(m=>{const s=rows.filter(r=>monthK(r.date)===m&&r.isSigned);const v=s.filter(r=>r.onTime==='是'||r.onTime==='否');const y=v.filter(r=>r.onTime==='是').length;return v.length?+(y/v.length*100).toFixed(1):null;});
+  chart('ovRate',{type:'line',data:{labels:months,datasets:[{label:'达标率%',data:rate,borderColor:PAL[1],backgroundColor:PAL[1]+'22',fill:true,tension:.3}]},
+    options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,max:100}}}});
+  // 运输结构 Top12
+  const cg=group(rows,'channelCategory');const items=Object.entries(cg).map(([k,v])=>({k,v})).sort((a,b)=>b.v.length-a.v.length).slice(0,12);
+  chart('ovMix',{type:'bar',data:{labels:items.map(i=>i.k),datasets:[{label:'票数',data:items.map(i=>i.v.length),backgroundColor:items.map((_,i)=>PAL[i%PAL.length])}]},
+    options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}});
+}
+
+function renderMix(rows){
+  const countries=[...new Set(rows.map(r=>r.country))].sort((a,b)=>rows.filter(r=>r.country===b).length-rows.filter(r=>r.country===a).length).slice(0,8);
+  const trans=[...new Set(rows.map(r=>r.transport))];
+  const ds=trans.map((t,i)=>({label:t,data:countries.map(c=>rows.filter(r=>r.country===c&&r.transport===t).length),backgroundColor:PAL[i%PAL.length]}));
+  chart('mixStack',{type:'bar',data:{labels:countries,datasets:ds},options:{plugins:{legend:{position:'bottom'}},scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}}});
+  const tg=group(rows,'transport');const items=Object.entries(tg).map(([k,v])=>({k,v})).sort((a,b)=>b.v.length-a.v.length);
+  chart('mixPie',{type:'doughnut',data:{labels:items.map(i=>i.k),datasets:[{data:items.map(i=>i.v.length),backgroundColor:items.map((_,i)=>PAL[i%PAL.length])}]},options:{plugins:{legend:{position:'bottom'}}},plugins:[pctLabel]});
+  // 表
+  const tb=document.querySelector('#mixTable tbody');
+  tb.innerHTML=items.map(({k,v})=>{
+    const valid=v.filter(r=>r.isSigned&&(r.onTime==='是'||r.onTime==='否'));const y=valid.filter(r=>r.onTime==='是').length;
+    return `<tr><td>${k}</td><td>${fmtN(v.length)}</td><td>${fPct(v.length,rows.length)}</td><td>${fmtN(sum(v,'pieces'))}</td><td>${fmtN(sum(v,'cbm').toFixed(1)*1)}</td><td>${meanPos(v,'transitDays').toFixed(1)}</td><td>${fPct(y,valid.length)}</td></tr>`;
+  }).join('');
+}
+
+function renderEfficiency(rows){
+  const procMean=meanPos(rows,'processDays');
+  const signed=rows.filter(r=>r.isSigned);
+  const valid=signed.filter(r=>r.onTime==='是'||r.onTime==='否');
+  const yes=valid.filter(r=>r.onTime==='是').length;
+  const kpis=[
+    {k:'下单→发运 均长',v:procMean.toFixed(1)+'天',s:'操作衔接速度',c:'cyan'},
+    {k:'时效达成率',v:fPct(yes,valid.length),s:`已判定 ${valid.length} 票`,c:'green'},
+    {k:'平均全程时效',v:meanPos(signed,'transitDays').toFixed(1)+'天',s:'已签收票',c:'blue'},
+    {k:'参考时效均值',v:meanPos(rows,'refLeadTime').toFixed(1)+'天',s:'渠道承诺',c:'purple'},
+  ];
+  document.getElementById('effKpis').innerHTML=kpis.map(x=>`<div class="kpi ${x.c}"><div class="k">${x.k}</div><div class="v">${x.v}</div><div class="s">${x.s}</div></div>`).join('');
+  // 时长分布
+  const buckets=['0-2','2-4','4-6','6-8','8-10','10+'];
+  const cnt=[0,0,0,0,0,0];
+  rows.forEach(r=>{const v=+r.processDays||0;if(v<=2)cnt[0]++;else if(v<=4)cnt[1]++;else if(v<=6)cnt[2]++;else if(v<=8)cnt[3]++;else if(v<=10)cnt[4]++;else cnt[5]++;});
+  chart('effHist',{type:'bar',data:{labels:buckets,datasets:[{label:'票数',data:cnt,backgroundColor:PAL[5]}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  // 各渠道 达标率 + 平均时效
+  const cg=group(rows,'channel');const items=Object.entries(cg).map(([k,v])=>({k,v})).sort((a,b)=>b.v.length-a.v.length).slice(0,12);
+  chart('effChan',{type:'bar',data:{labels:items.map(i=>i.k),datasets:[
+    {label:'达标率%',data:items.map(i=>{const v=i.v.filter(r=>r.isSigned&&(r.onTime==='是'||r.onTime==='否'));const y=v.filter(r=>r.onTime==='是').length;return v.length?+(y/v.length*100).toFixed(1):0;}),backgroundColor:PAL[1],yAxisID:'y'},
+    {label:'平均时效(天)',data:items.map(i=>meanPos(i.v.filter(r=>r.isSigned),'transitDays').toFixed(1)*1),backgroundColor:PAL[0],yAxisID:'y1'}]},
+    options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,max:100,position:'left'},y1:{beginAtZero:true,position:'right',grid:{drawOnChartArea:false}}}}});
+  // 月度达标率
+  const months=[...new Set(rows.map(r=>monthK(r.date)))].filter(m=>m!=='未知').sort();
+  const rate=months.map(m=>{const s=rows.filter(r=>monthK(r.date)===m&&r.isSigned);const v=s.filter(r=>r.onTime==='是'||r.onTime==='否');const y=v.filter(r=>r.onTime==='是').length;return v.length?+(y/v.length*100).toFixed(1):null;});
+  chart('effTrend',{type:'line',data:{labels:months,datasets:[{label:'达标率%',data:rate,borderColor:PAL[1],backgroundColor:PAL[1]+'22',fill:true,tension:.3}]},options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,max:100}}}});
+}
+
+function renderInspection(rows){
+  const dom=rows.filter(r=>r.domesticInsp).length;
+  const ovs=rows.filter(r=>r.overseasInsp).length;
+  const both=rows.filter(r=>r.domesticInsp&&r.overseasInsp).length;
+  const cross=group(rows,'inspCross');
+  const domIn=rows.filter(r=>r.domesticInsp&&!r.domesticReleased).length;
+  const domRel=rows.filter(r=>r.domesticInsp&&r.domesticReleased).length;
+  const ovsIn=rows.filter(r=>r.overseasInsp&&!r.overseasReleased).length;
+  const ovsRel=rows.filter(r=>r.overseasInsp&&r.overseasReleased).length;
+  const dd=rows.filter(r=>r.domesticDays!=null).map(r=>r.domesticDays);
+  const od=rows.filter(r=>r.overseasDays!=null).map(r=>r.overseasDays);
+  const kpis=[
+    {k:'国内查验',v:fmtN(dom),s:fPct(dom,rows.length),c:'blue'},
+    {k:'国外查验',v:fmtN(ovs),s:fPct(ovs,rows.length),c:'amber'},
+    {k:'国内+国外同时',v:fmtN(both),s:'两头卡最危险',c:'red'},
+    {k:'国内在查均长',v:(dd.length?(dd.reduce((a,b)=>a+b,0)/dd.length):0).toFixed(1)+'天',s:`在查 ${dd.length} 票`,c:'blue'},
+    {k:'国外在查均长',v:(od.length?(od.reduce((a,b)=>a+b,0)/od.length):0).toFixed(1)+'天',s:`在查 ${od.length} 票`,c:'amber'},
+    {k:'已结案(放行)',v:fmtN(domRel+ovsRel),s:'国内'+domRel+'/国外'+ovsRel,c:'green'},
+  ];
+  document.getElementById('inspKpis').innerHTML=kpis.map(x=>`<div class="kpi ${x.c}"><div class="k">${x.k}</div><div class="v">${x.v}</div><div class="s">${x.s}</div></div>`).join('');
+  chart('ringDom',{type:'doughnut',data:{labels:['国内在查','国内已放行','无国内查验'],datasets:[{data:[domIn,domRel,rows.length-dom],backgroundColor:[PAL[0],PAL[1],'#e5e7eb']}]},options:{plugins:{legend:{position:'bottom'}}},plugins:[pctLabel]});
+  chart('ringOvs',{type:'doughnut',data:{labels:['国外在查','国外已放行','无国外查验'],datasets:[{data:[ovsIn,ovsRel,rows.length-ovs],backgroundColor:[PAL[3],PAL[1],'#e5e7eb']}]},options:{plugins:{legend:{position:'bottom'}}},plugins:[pctLabel]});
+  const cl=['单一国内','单一国外','国内+国外','无查验'];
+  chart('inspCross',{type:'bar',data:{labels:cl,datasets:[{label:'票数',data:cl.map(c=>(cross[c]||[]).length),backgroundColor:[PAL[0],PAL[3],PAL[4],'#cbd5e1']}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  document.getElementById('domDays').textContent=(dd.length?(dd.reduce((a,b)=>a+b,0)/dd.length):0).toFixed(1);
+  document.getElementById('ovsDays').textContent=(od.length?(od.reduce((a,b)=>a+b,0)/od.length):0).toFixed(1);
+  document.getElementById('inspReleased').innerHTML=`<span><i style="background:var(--green)"></i>国内已放行 ${domRel}</span><span><i style="background:var(--green)"></i>国外已放行 ${ovsRel}</span><span><i style="background:var(--brand)"></i>国内在查 ${domIn}</span><span><i style="background:var(--amber)"></i>国外在查 ${ovsIn}</span>`;
+  // 各渠道查验率：过滤低票数噪声，按综合率排序，水平条形图+表格
+  let minVol=30;
+  const cg=group(rows,'channel');
+  const rateNum=(a,b)=>b>0?(a/b*100):0;
+  let items=Object.entries(cg).map(([k,v])=>{
+    const n=v.length,dom=v.filter(r=>r.domesticInsp).length,ovs=v.filter(r=>r.overseasInsp).length;
+    return{k,v,n,dom,ovs,domRate:rateNum(dom,n),ovsRate:rateNum(ovs,n),totalRate:rateNum(dom+ovs,n)};
+  }).filter(i=>i.n>=minVol).sort((a,b)=>b.totalRate-a.totalRate).slice(0,15);
+  if(items.length<5){
+    minVol=10;
+    items=Object.entries(cg).map(([k,v])=>{
+      const n=v.length,dom=v.filter(r=>r.domesticInsp).length,ovs=v.filter(r=>r.overseasInsp).length;
+      return{k,v,n,dom,ovs,domRate:rateNum(dom,n),ovsRate:rateNum(ovs,n),totalRate:rateNum(dom+ovs,n)};
+    }).filter(i=>i.n>=minVol).sort((a,b)=>b.totalRate-a.totalRate).slice(0,15);
+  }
+  chart('inspChan',{type:'bar',data:{labels:items.map(i=>i.k),datasets:[
+    {label:'国内查验率%',data:items.map(i=>i.domRate),backgroundColor:PAL[0]},
+    {label:'国外查验率%',data:items.map(i=>i.ovsRate),backgroundColor:PAL[3]}]},
+    options:{indexAxis:'y',plugins:{legend:{position:'bottom'}},scales:{x:{beginAtZero:true},y:{ticks:{font:{size:11}}}}}});
+  document.querySelector('#inspChanTable tbody').innerHTML=items.map(i=>`<tr>
+    <td>${i.k}</td><td>${fmtN(i.n)}</td><td>${fmtN(i.dom)}</td><td>${i.domRate.toFixed(1)}%</td>
+    <td>${fmtN(i.ovs)}</td><td>${i.ovsRate.toFixed(1)}%</td><td><b>${i.totalRate.toFixed(1)}%</b></td>
+  </tr>`).join('');
+  // 已放行查验耗时统计（国内/国外）
+  const dRel=rows.filter(r=>r.domesticReleasedDays!=null).map(r=>r.domesticReleasedDays);
+  const oRel=rows.filter(r=>r.overseasReleasedDays!=null).map(r=>r.overseasReleasedDays);
+  const sd=statBlock(dRel), so=statBlock(oRel);
+  const rowDefs=[['样本数',x=>fmtN(x.n)],['均值',x=>x.mean.toFixed(1)],['最小',x=>x.min.toFixed(0)],['P25',x=>x.p25.toFixed(0)],['中位(P50)',x=>x.med.toFixed(0)],['P75',x=>x.p75.toFixed(0)],['P90',x=>x.p90.toFixed(0)],['最大',x=>x.max.toFixed(0)]];
+  document.querySelector('#relStatTable tbody').innerHTML=rowDefs.map(([k,f])=>`<tr><td>${k}</td><td>${sd?f(sd):'—'}</td><td>${so?f(so):'—'}</td></tr>`).join('');
+  const edges=[1,2,3,5,7,10,15,21,30];
+  const labels=['<1','1-2','2-3','3-5','5-7','7-10','10-15','15-21','21-30','30+'];
+  const bucket=arr=>{const c=labels.map(()=>0);arr.forEach(v=>{let i=edges.findIndex(e=>v<e);if(i<0)i=labels.length-1;c[i]++;});return c;};
+  chart('relHist',{type:'bar',data:{labels,datasets:[
+    {label:'国内·起运港',data:bucket(dRel),backgroundColor:PAL[0]},
+    {label:'国外·目的港',data:bucket(oRel),backgroundColor:PAL[3]}]},
+    options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true}}}});
+}
+
+function renderException(rows){
+  const delayed=rows.filter(r=>r.isDelayed);
+  const delayCheck=delayed.filter(r=>r.delayCategory==='查验类延误').length;
+  const delayTrans=delayed.filter(r=>r.delayCategory==='运输类延误').length;
+  const loss=rows.filter(r=>r.lossClaim).length;
+  const excCore=rows.filter(r=>r.isDelayed||r.lossClaim).length;
+  const kpis=[
+    {k:'异常率(核心)',v:fPct(excCore,rows.length),s:`延误+赔付 ${excCore} 票`,c:'red'},
+    {k:'延误异常',v:fmtN(delayed.length),s:`查验类 ${delayCheck} / 运输类 ${delayTrans}`,c:'amber'},
+    {k:'赔付/索赔/开查',v:fmtN(loss),s:'已发生钱的损失',c:'red'},
+    {k:'查验类延误',v:fmtN(delayCheck),s:'因查验拖期',c:'purple'},
+    {k:'运输类延误',v:fmtN(delayTrans),s:'开船/到港/派送等',c:'blue'},
+    {k:'在途超时',v:fmtN(rows.filter(r=>r.overdue).length),s:'见在途监控页',c:'cyan'},
+  ];
+  document.getElementById('excKpis').innerHTML=kpis.map(x=>`<div class="kpi ${x.c}"><div class="k">${x.k}</div><div class="v">${x.v}</div><div class="s">${x.s}</div></div>`).join('');
+  chart('excDough',{type:'doughnut',data:{labels:['查验类延误','运输类延误','赔付/索赔/开查'],datasets:[{data:[delayCheck,delayTrans,loss],backgroundColor:[PAL[4],PAL[0],PAL[3]]}]},options:{plugins:{legend:{position:'bottom'}}},plugins:[pctLabel]});
+  const dg=group(delayed,'delayType');const items=Object.entries(dg).map(([k,v])=>({k,v})).sort((a,b)=>b.v.length-a.v.length).slice(0,12);
+  chart('excDelay',{type:'bar',data:{labels:items.map(i=>i.k),datasets:[{label:'票数',data:items.map(i=>i.v.length),backgroundColor:PAL[3]}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}});
+  // 异常率对比表：按事业部/渠道/国家
+  const tb=document.querySelector('#excTable tbody');
+  const dims=[['事业部','bu'],['渠道','channel'],['国家','country']];
+  let html='';
+  dims.forEach(([label,key])=>{
+    const g=group(rows,key);
+    Object.entries(g).map(([k,v])=>({k,v})).sort((a,b)=>b.v.length-a.v.length).slice(0,6).forEach(({k,v})=>{
+      const ex=v.filter(r=>r.isDelayed||r.lossClaim).length;const lo=v.filter(r=>r.lossClaim).length;
+      html+=`<tr><td>${label}</td><td>${k}</td><td>${fmtN(v.length)}</td><td>${fmtN(ex)}</td><td>${fPct(ex,v.length)}</td><td>${lo}</td></tr>`;
+    });
+  });
+  tb.innerHTML=html;
+}
+
+function renderDelay(rows){
+  const over=rows.filter(r=>r.overRefLead);
+  const blank=over.filter(r=>r.delayBlank);
+  const filled=over.filter(r=>!r.delayBlank);
+  const overDays=over.map(r=>Math.max(0,(+r.intransitDays||0)-(+r.refLeadTime||0))).filter(x=>x>0);
+  const avgOver=overDays.length?overDays.reduce((a,b)=>a+b,0)/overDays.length:0;
+  const kpis=[
+    {k:'超参考时效未签收',v:fmtN(over.length),s:'理论上都应填写延误类型',c:'red'},
+    {k:'已填延误类型',v:fmtN(filled.length),s:'按规范填报',c:'green'},
+    {k:'应填未填',v:fmtN(blank.length),s:'人工疏漏清单',c:'amber'},
+    {k:'平均超期天数',v:avgOver.toFixed(1)+'天',s:'在途天数 - 参考时效',c:'purple'},
+  ];
+  document.getElementById('delayKpis').innerHTML=kpis.map(x=>`<div class="kpi ${x.c}"><div class="k">${x.k}</div><div class="v">${x.v}</div><div class="s">${x.s}</div></div>`).join('');
+  // 超期天数分布
+  const buckets=['1-5','6-10','11-20','21-30','30+'];const cnt=[0,0,0,0,0];
+  overDays.forEach(d=>{if(d<=5)cnt[0]++;else if(d<=10)cnt[1]++;else if(d<=20)cnt[2]++;else if(d<=30)cnt[3]++;else cnt[4]++;});
+  chart('delayHist',{type:'bar',data:{labels:buckets,datasets:[{label:'票数',data:cnt,backgroundColor:PAL[3]}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  // 按渠道分布
+  const cg=group(over,'channel');const items=Object.entries(cg).map(([k,v])=>({k,v})).sort((a,b)=>b.v.length-a.v.length).slice(0,12);
+  chart('delayChan',{type:'bar',data:{labels:items.map(i=>i.k),datasets:[{label:'超参考时效票',data:items.map(i=>i.v.length),backgroundColor:PAL[3]}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}}}});
+  // 应填未填清单（Top 50）
+  const tb=document.querySelector('#delayBlankTable tbody');
+  const list=blank.map(r=>({r,over:+r.intransitDays-(+r.refLeadTime||0)})).sort((a,b)=>b.over-a.over).slice(0,50);
+  tb.innerHTML=list.map(({r,over})=>`<tr>
+    <td>${r.orderNo||'—'}</td><td>${r.bu}</td><td>${r.channel}</td><td>${r.country}</td>
+    <td>${r.date||'—'}</td><td>${(+r.intransitDays||0).toFixed(0)}</td><td>${(+r.refLeadTime||0).toFixed(0)}</td><td>${over>0?over.toFixed(0):0}</td>
+  </tr>`).join('');
+  // 查验对延误的影响（仅已完成且含参考时效）
+  const signed=rows.filter(r=>r.isSigned && r.refLeadTime>0 && r.transitDays>0);
+  const dimOf=r=>{if(r.domesticInsp&&r.overseasInsp)return '国内+国外';if(r.domesticInsp)return '仅起运港';if(r.overseasInsp)return '仅目的港';return '无查验';};
+  const dims=['无查验','仅起运港','仅目的港','国内+国外'];
+  const stats=dims.map(dm=>{
+    const rs=signed.filter(r=>dimOf(r)===dm);const n=rs.length;
+    const at=n?rs.reduce((a,b)=>a+b.transitDays,0)/n:0;
+    const ar=n?rs.reduce((a,b)=>a+b.refLeadTime,0)/n:0;
+    return {dm,n,avgTrans:at,avgRef:ar,excess:at-ar};
+  });
+  const base=stats[0].excess;
+  document.querySelector('#inspImpactTable tbody').innerHTML=stats.map(s=>`<tr>
+    <td>${s.dm}</td><td>${fmtN(s.n)}</td><td>${s.avgTrans.toFixed(1)}天</td><td>${s.avgRef.toFixed(1)}天</td>
+    <td style="color:${s.excess>0?'var(--red)':'var(--green)'}">${s.excess>=0?'+':''}${s.excess.toFixed(1)}天</td>
+    <td style="color:${(s.excess-base)>0?'var(--red)':'var(--green)'};font-weight:600">${s.dm==='无查验'?'基准':((s.excess-base)>=0?'+':'')+(s.excess-base).toFixed(1)+'天'}</td>
+  </tr>`).join('');
+  chart('inspImpactChart',{type:'bar',data:{labels:dims,datasets:[
+    {label:'平均全程时效(天)',data:stats.map(s=>+s.avgTrans.toFixed(1)),backgroundColor:PAL[3]},
+    {label:'平均参考时效(天)',data:stats.map(s=>+s.avgRef.toFixed(1)),backgroundColor:'#cbd5e1'}]},
+    options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true}}}});
+}
+
+function renderIntransit(rows){
+  const intr=rows.filter(r=>!r.isSigned);
+  const ovr=intr.filter(r=>r.overdue);
+  // 账龄直接用 ETL 计算的 intransitDays（出货日→数据日）
+  const ages=intr.map(r=>+r.intransitDays||0).filter(x=>x>0);
+  const avgAge=ages.length?ages.reduce((a,b)=>a+b,0)/ages.length:0;
+  const kpis=[
+    {k:'在途票数',v:fmtN(intr.length),s:'尚未签收',c:'blue'},
+    {k:'超时票数',v:fmtN(ovr.length),s:'最晚送达已过仍未签',c:'red'},
+    {k:'超时率',v:fPct(ovr.length,intr.length),s:'在途中的超时占比',c:'amber'},
+    {k:'平均在途天数',v:avgAge.toFixed(1)+'天',s:'以出货日为起点',c:'cyan'},
+  ];
+  // 平均在途天数：用 as_of - 出货日期 近似（数据无 as_of 字段，用最近出货日推算）
+  document.getElementById('intrKpis').innerHTML=kpis.map(x=>`<div class="kpi ${x.c}"><div class="k">${x.k}</div><div class="v">${x.v}</div><div class="s">${x.s}</div></div>`).join('');
+  // 超时 by 渠道
+  const cg=group(intr,'channel');const items=Object.entries(cg).map(([k,v])=>({k,v})).sort((a,b)=>b.v.filter(r=>r.overdue).length-a.v.filter(r=>r.overdue).length).slice(0,12);
+  chart('intrChan',{type:'bar',data:{labels:items.map(i=>i.k),datasets:[{label:'超时票',data:items.map(i=>i.v.filter(r=>r.overdue).length),backgroundColor:PAL[3]},
+    {label:'在途票',data:items.map(i=>i.v.length),backgroundColor:'#cbd5e1'}]},options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true}}}});
+  // 账龄分布（ETL 计算的 intransitDays）
+  const buckets=['0-15','15-30','30-45','45-60','60+'];const cnt=[0,0,0,0,0];
+  intr.forEach(r=>{const age=+r.intransitDays||0;if(!age)return;if(age<=15)cnt[0]++;else if(age<=30)cnt[1]++;else if(age<=45)cnt[2]++;else if(age<=60)cnt[3]++;else cnt[4]++;});
+  chart('intrAge',{type:'bar',data:{labels:buckets,datasets:[{label:'在途票',data:cnt,backgroundColor:PAL[5]}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+}
+
+function renderUsOcean(){
+  // 范围：美国海运 + 已识别船型 + 已识别派送类型；尊重全局事业部筛选，但本页自带派送/区域联动
+  const base=ALL.filter(r=>r.country==='美国'&&r.shipType&&r.deliveryType);
+  let us=base;
+  if(F.bu) us=us.filter(r=>r.bu===F.bu);
+  const dl=usSel.delivery, rg=usSel.region;
+  const view=us.filter(r=>(!dl||r.deliveryType===dl)&&(!rg||r.regionClean===rg));
+  const signed=r=>(r.isSigned&&(+r.transitDays||0)>0);
+  document.getElementById('usScope').textContent=`范围：美国海运 · 当前 ${fmtN(view.length)} 票（派送=${dl||'全部'} / 区域=${rg||'全部'}${F.bu?' / 事业部='+F.bu:''}）`;
+
+  const shipsPresent=SHIPS.filter(s=>view.some(r=>r.shipType===s));
+  const shipColors=['#2563eb','#f59e0b','#8b5cf6','#06b6d4'];
+  const shipKpis=shipsPresent.map(s=>({k:s,v:fmtN(view.filter(r=>r.shipType===s).length),c:['blue','amber','purple','cyan'][SHIP_TIER[s]]}));
+  const avgByShip=shipsPresent.map(s=>{const rs=view.filter(r=>r.shipType===s).filter(signed);return rs.length?{s,avg:meanPos(rs,'transitDays'),n:rs.length}:null;}).filter(Boolean);
+  let spanTxt='—';
+  if(avgByShip.length>=2){const mn=Math.min(...avgByShip.map(x=>x.avg)),mx=Math.max(...avgByShip.map(x=>x.avg));spanTxt=(mx-mn).toFixed(1)+'天';}
+  const kpis=[
+    {k:'美线海运票数',v:fmtN(view.length),s:'已识别船型+派送',c:'blue'},
+    ...shipKpis,
+    {k:'船型间时效差(最大−最小)',v:spanTxt,s:'越小越可互换',c:'green'},
+  ];
+  document.getElementById('usKpis').innerHTML=kpis.map(x=>`<div class="kpi ${x.c}"><div class="k">${x.k}</div><div class="v">${x.v}</div><div class="s">${x.s||''}</div></div>`).join('');
+
+  // A) 月度时效趋势（4 船型折线）
+  const months=[...new Set(view.map(r=>r.bizMonth))].filter(m=>m!=='未知').sort();
+  const dsTrend=shipsPresent.map(s=>{
+    const data=months.map(m=>{const rs=view.filter(r=>r.shipType===s&&r.bizMonth===m).filter(signed);return rs.length>=5?+meanPos(rs,'transitDays').toFixed(1):null;});
+    const col=shipColors[SHIP_TIER[s]];
+    return {label:s,data,borderColor:col,backgroundColor:col+'22',fill:false,tension:.3,spanGaps:true};
+  });
+  chart('usTrend',{type:'line',data:{labels:months,datasets:dsTrend},options:{plugins:{legend:{position:'bottom'}},scales:{y:{title:{display:true,text:'平均时效(天)'}}}}});
+
+  // B) 船型 × 区域 分组柱
+  const regions=REGIONS.filter(r=>!rg||r===rg);
+  const dsBar=regions.map(reg=>({
+    label:reg,
+    data:shipsPresent.map(s=>{const rs=view.filter(r=>r.shipType===s&&r.regionClean===reg).filter(signed);return rs.length>=5?+meanPos(rs,'transitDays').toFixed(1):null;}),
+    backgroundColor:REGION_COLORS[reg]
+  }));
+  chart('usBar',{type:'bar',data:{labels:shipsPresent,datasets:dsBar},options:{plugins:{legend:{position:'bottom'}},scales:{y:{title:{display:true,text:'平均时效(天)'}}}}});
+
+  // C) 全景表
+  let rows=[];
+  shipsPresent.forEach(s=>DELIV.forEach(d=>REGIONS.forEach(reg=>{
+    const rs=view.filter(r=>r.shipType===s&&r.deliveryType===d&&r.regionClean===reg);
+    if(!rs.length)return;
+    const tr=rs.filter(signed);
+    const valid=rs.filter(r=>r.onTime==='是'||r.onTime==='否');const y=valid.filter(r=>r.onTime==='是').length;
+    rows.push({s,d,reg,n:rs.length,avg:tr.length?meanPos(tr,'transitDays'):0,med:median(tr.map(r=>r.transitDays)),rate:valid.length?fPct(y,valid.length):'—'});
+  })));
+  rows.sort((a,b)=>SHIP_TIER[a.s]-SHIP_TIER[b.s]||DELIV.indexOf(a.d)-DELIV.indexOf(b.d)||REGIONS.indexOf(a.reg)-REGIONS.indexOf(b.reg));
+  document.querySelector('#usTable tbody').innerHTML=rows.map(r=>`<tr><td>${r.s}</td><td>${r.d}</td><td>${r.reg}</td><td>${fmtN(r.n)}</td><td>${r.avg?r.avg.toFixed(1):'—'}</td><td>${r.med?r.med.toFixed(1):'—'}</td><td>${r.rate}</td></tr>`).join('');
+
+  // D) 降档优化机会（时效差≤3天）
+  const tips=[];
+  DELIV.forEach(d=>REGIONS.forEach(reg=>{
+    const present=SHIPS.filter(s=>{const rs=view.filter(r=>r.shipType===s&&r.deliveryType===d&&r.regionClean===reg).filter(signed);return rs.length>=30;});
+    present.forEach(sA=>present.forEach(sB=>{
+      if(SHIP_TIER[sA]<SHIP_TIER[sB]){
+        const a=meanPos(view.filter(r=>r.shipType===sA&&r.deliveryType===d&&r.regionClean===reg).filter(signed),'transitDays');
+        const b=meanPos(view.filter(r=>r.shipType===sB&&r.deliveryType===d&&r.regionClean===reg).filter(signed),'transitDays');
+        const gap=Math.abs(a-b);
+        if(gap<=3) tips.push(`【${d}·${reg}】<b>${sA}</b> 均时效 ${a.toFixed(1)}天 ≈ <b>${sB}</b> ${b.toFixed(1)}天（仅差 ${gap.toFixed(1)}天）→ 可评估改走更便宜的 ${sB} 降运费`);
+      }
+    }));
+  }));
+  document.getElementById('usTips').innerHTML=tips.length
+    ? tips.map(t=>'• '+t).join('<br>')
+    : '当前筛选下各船型时效差均 &gt;3 天，暂无明显可降档空间（或样本不足）。可缩小筛选或看上方趋势图细看。';
+}
+
+function renderDetail(rows){
+  const q=detail.search.trim().toLowerCase();
+  let f=rows;
+  if(q) f=rows.filter(r=>[r.orderNo,r.trackNo,r.bu,r.country,r.transport,r.channel,r.shop,r.seller,r.status].join(' ').toLowerCase().includes(q));
+  const total=f.length;const pages=Math.max(1,Math.ceil(total/detail.size));
+  detail.page=Math.min(detail.page,pages);
+  const start=(detail.page-1)*detail.size;const slice=f.slice(start,start+detail.size);
+  const tb=document.querySelector('#detTable tbody');
+  tb.innerHTML=slice.map(r=>`<tr>
+    <td>${r.orderNo||'—'}</td><td>${r.trackNo||'—'}</td><td>${r.bu}</td><td>${r.shop||'—'}</td>
+    <td>${r.channel}</td><td>${r.agentChannel||'—'}</td><td>${r.country}</td><td>${r.transport}</td><td>${r.date||'—'}</td>
+    <td><span class="pill ${['签收','送达','完成'].includes(r.status)?'y':['查验中','理赔中'].includes(r.status)?'w':'b'}">${r.status}</span></td>
+    <td>${r.onTime?(r.onTime==='是'?'<span class="pill y">是</span>':r.onTime==='否'?'<span class="pill n">否</span>':r.onTime==='未完成已超时效'?'<span class="pill w">超时</span>':'<span class="pill b">在途</span>'):'—'}</td>
+    <td>${r.domesticInsp?'<span class="pill b">查</span>':'—'}</td>
+    <td>${r.overseasInsp?'<span class="pill b">查</span>':'—'}</td>
+    <td>${r.delayType||'—'}</td>
+    <td>${r.hasException?'<span class="pill n">异常</span>':'—'}</td>
+  </tr>`).join('');
+  document.getElementById('detCount').textContent=`共 ${fmtN(total)} 票`;
+  document.getElementById('detPageInfo').textContent=`第 ${detail.page}/${pages} 页`;
+  document.getElementById('detPrev').disabled=detail.page<=1;
+  document.getElementById('detNext').disabled=detail.page>=pages;
+}
+
+/* ---------- 趋势分析（时间=仓库出货日期 YYYY-MM） ---------- */
+function renderTrend(rows){
+  const mset={};
+  rows.forEach(r=>{const m=(r.date||'').slice(0,7); if(m)(mset[m]=mset[m]||[]).push(r);});
+  const months=Object.keys(mset).sort();
+  const pct=(a,b)=>b?+(a/b*100).toFixed(1):0;
+  const agg=months.map(m=>{
+    const v=mset[m], n=v.length;
+    const dom=v.filter(r=>r.domesticInsp).length, ovs=v.filter(r=>r.overseasInsp).length;
+    const signed=v.filter(r=>r.isSigned);
+    const td=signed.map(r=>+r.transitDays||0).filter(x=>x>0);
+    const avgTime=td.length?+(td.reduce((a,b)=>a+b,0)/td.length).toFixed(1):null;
+    const ot=signed.length?pct(signed.filter(r=>r.onTime==='是').length,signed.length):null;
+    const overSigned=signed.length?pct(signed.filter(r=>r.onTime==='否').length,signed.length):null;
+    return {m,n,domRate:pct(dom,n),ovsRate:pct(ovs,n),combRate:pct(dom+ovs,n),
+      avgTime,onTimeRate:ot,excRate:pct(v.filter(r=>r.hasException).length,n),overRate:overSigned};
+  });
+  const total=rows.length;
+  const tdom=rows.filter(r=>r.domesticInsp).length, tovs=rows.filter(r=>r.overseasInsp).length;
+  const tsigned=rows.filter(r=>r.isSigned);
+  const ttd=tsigned.map(r=>+r.transitDays||0).filter(x=>x>0);
+  const kpis=[
+    {k:'覆盖区间',v:(months.length?(months[0]+' ~ '+months[months.length-1]):'—'),s:months.length+' 个出货月',c:'blue'},
+    {k:'总票数',v:fmtN(total),s:'区间合计',c:'blue'},
+    {k:'平均时效',v:(ttd.length?(ttd.reduce((a,b)=>a+b,0)/ttd.length).toFixed(1):'—')+'天',s:'已完成票',c:'amber'},
+    {k:'时效达标率',v:(tsigned.length?fPct(tsigned.filter(r=>r.onTime==='是').length,tsigned.length):'—'),s:'已完成票',c:'green'},
+    {k:'综合查验率',v:fPct(tdom+tovs,total),s:'国内'+fmtN(tdom)+'/国外'+fmtN(tovs),c:'red'},
+    {k:'异常率',v:fPct(rows.filter(r=>r.hasException).length,total),s:'含延误/赔付索赔开查',c:'red'},
+  ];
+  document.getElementById('trKpis').innerHTML=kpis.map(x=>`<div class="kpi ${x.c}"><div class="k">${x.k}</div><div class="v">${x.v}</div><div class="s">${x.s}</div></div>`).join('');
+  chart('trVol',{type:'bar',data:{labels:months,datasets:[{label:'发运票数',data:agg.map(a=>a.n),backgroundColor:PAL[0]}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+  chart('trInsp',{type:'line',data:{labels:months,datasets:[
+    {label:'国内查验率%',data:agg.map(a=>a.domRate),borderColor:PAL[0],backgroundColor:PAL[0],tension:.3},
+    {label:'国外查验率%',data:agg.map(a=>a.ovsRate),borderColor:PAL[3],backgroundColor:PAL[3],tension:.3},
+    {label:'综合查验率%',data:agg.map(a=>a.combRate),borderColor:PAL[4],backgroundColor:PAL[4],tension:.3,borderDash:[5,4]}
+  ]},options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true}}}});
+  chart('trTime',{type:'line',data:{labels:months,datasets:[
+    {label:'平均全程时效(天)',data:agg.map(a=>a.avgTime),borderColor:PAL[3],backgroundColor:PAL[3],yAxisID:'y',tension:.3},
+    {label:'时效达标率%',data:agg.map(a=>a.onTimeRate),borderColor:PAL[1],backgroundColor:PAL[1],yAxisID:'y1',tension:.3}
+  ]},options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,title:{display:true,text:'天'}},y1:{position:'right',beginAtZero:true,max:100,grid:{drawOnChartArea:false},title:{display:true,text:'%'}}}}});
+  chart('trExc',{type:'line',data:{labels:months,datasets:[
+    {label:'异常率%',data:agg.map(a=>a.excRate),borderColor:PAL[4],backgroundColor:PAL[4],tension:.3},
+    {label:'未达标率%',data:agg.map(a=>a.overRate),borderColor:PAL[2],backgroundColor:PAL[2],tension:.3}
+  ]},options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true}}}});
+  document.querySelector('#trTable tbody').innerHTML=agg.map(a=>`<tr>
+    <td>${a.m}</td><td>${fmtN(a.n)}</td>
+    <td>${a.domRate.toFixed(1)}%</td><td>${a.ovsRate.toFixed(1)}%</td>
+    <td><b>${a.combRate.toFixed(1)}%</b></td>
+    <td>${a.avgTime!=null?a.avgTime.toFixed(1):'—'}</td>
+    <td>${a.onTimeRate!=null?a.onTimeRate.toFixed(1)+'%':'—'}</td>
+    <td>${a.excRate.toFixed(1)}%</td><td>${a.overRate.toFixed(1)}%</td>
+  </tr>`).join('');
+}
+
+/* ---------- 总调度 ---------- */
+function renderAll(){
+  const rows=applyFilters();
+  document.getElementById('metaLine').textContent=`当前筛选：${rows.length} 票（数据源 ${META?META.source:''} · 生成 ${META?META.generatedAt:''}）`;
+  if(curPage==='overview')renderOverview(rows);
+  else if(curPage==='mix')renderMix(rows);
+  else if(curPage==='efficiency')renderEfficiency(rows);
+  else if(curPage==='inspection')renderInspection(rows);
+  else if(curPage==='exception')renderException(rows);
+  else if(curPage==='delay')renderDelay(rows);
+  else if(curPage==='intransit')renderIntransit(rows);
+  else if(curPage==='trend')renderTrend(rows);
+  else if(curPage==='usocean')renderUsOcean();
+  else if(curPage==='detail')renderDetail(rows);
+}
+
+function buildFilters(){
+  const fill=(id,vals,allLabel='全部')=>{
+    const el=document.getElementById(id);el.innerHTML=`<option value="">${allLabel}</option>`+vals.map(v=>`<option value="${v}">${v}</option>`).join('');
+  };
+  fill('fBu',[...new Set(ALL.map(r=>r.bu))].sort());
+  fill('fChannel',[...new Set(ALL.map(r=>r.channel))].filter(Boolean).sort());
+  fill('fCountry',[...new Set(ALL.map(r=>r.country))].filter(Boolean).sort());
+  fill('fTransport',[...new Set(ALL.map(r=>r.transport))].filter(Boolean).sort());
+  fill('fCat',[...new Set(ALL.map(r=>r.channelCategory))].filter(Boolean).sort());
+  fill('fMonth',[...new Set(ALL.map(r=>monthK(r.date)))].filter(m=>m!=='未知').sort());
+  ['fBu','fChannel','fCountry','fTransport','fCat','fMonth'].forEach(id=>{
+    document.getElementById(id).addEventListener('change',e=>{
+      const key=id.replace('f','').toLowerCase();F[key]=e.target.value;renderAll();
+    });
+  });
+  document.getElementById('fUsDelivery').addEventListener('change',e=>{usSel.delivery=e.target.value;renderAll();});
+  document.getElementById('fUsRegion').addEventListener('change',e=>{usSel.region=e.target.value;renderAll();});
+  document.getElementById('resetBtn').addEventListener('click',()=>{
+    F={bu:'',channel:'',country:'',transport:'',cat:'',month:''};
+    ['fBu','fChannel','fCountry','fTransport','fCat','fMonth'].forEach(id=>document.getElementById(id).value='');
+    renderAll();
+  });
+}
+
+function initNav(){
+  document.querySelectorAll('.nav a').forEach(a=>a.addEventListener('click',()=>{
+    document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('active'));
+    a.classList.add('active');
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    curPage=a.dataset.page;
+    document.getElementById('page-'+curPage).classList.add('active');
+    renderAll();
+  }));
+}
+
+function initDetailEvents(){
+  document.getElementById('detSearch').addEventListener('input',e=>{detail.search=e.target.value;detail.page=1;renderDetail(applyFilters());});
+  document.getElementById('detPrev').addEventListener('click',()=>{detail.page--;renderDetail(applyFilters());});
+  document.getElementById('detNext').addEventListener('click',()=>{detail.page++;renderDetail(applyFilters());});
+}
+
+fetch('data.json').then(r=>r.json()).then(d=>{
+  ALL=d.records;META=d.meta;
+  buildFilters();initNav();initDetailEvents();renderAll();
+}).catch(e=>{
+  document.getElementById('metaLine').textContent='⚠️ 加载 data.json 失败：'+e.message+'（请确认已生成 data.json 或部署包含该文件）';
+});
+</script>
+</body>
+</html>
