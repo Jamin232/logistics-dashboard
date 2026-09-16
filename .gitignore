@@ -1,0 +1,9 @@
+# 构建中间产物 / 数据快照 / 日志 / 临时文件 不入库
+source/
+__pycache__/
+*.xlsx
+daily_log.txt
+last_run.json
+col_dump.txt
+sample_dump.txt
+_check.js
